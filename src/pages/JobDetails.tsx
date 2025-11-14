@@ -194,7 +194,7 @@ const JobDetails = () => {
 
                 {isEligible && (
                   <Button className="w-full" size="lg" asChild>
-                    <Link to="/interview/mcq">Start Interview Process</Link>
+                    <Link to="/interview/ai">Start Interview Process</Link>
                   </Button>
                 )}
 

@@ -146,6 +146,14 @@ All colors MUST be HSL.
     animation: scaleIn 0.4s ease-out forwards;
   }
 
+  .animate-bounce-in {
+    animation: bounceIn 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards;
+  }
+
+  .animate-slide-down {
+    animation: slideDown 0.5s ease-out forwards;
+  }
+
   .stagger-1 {
     animation-delay: 0.1s;
   }
@@ -162,16 +170,37 @@ All colors MUST be HSL.
     animation-delay: 0.4s;
   }
 
+  .stagger-5 {
+    animation-delay: 0.5s;
+  }
+
+  .stagger-6 {
+    animation-delay: 0.6s;
+  }
+
   .hover-lift {
-    transition: var(--transition-smooth);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .hover-lift:hover {
     transform: translateY(-4px);
+    box-shadow: 0 12px 24px -8px rgba(0, 0, 0, 0.15);
+  }
+
+  .hover-glow {
+    transition: box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .hover-glow:hover {
     box-shadow: var(--shadow-glow);
+  }
+
+  .hover-scale {
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .hover-scale:hover {
+    transform: scale(1.05);
   }
 
   .shimmer {
@@ -189,6 +218,18 @@ All colors MUST be HSL.
     background: var(--gradient-shimmer);
     animation: shimmer 2s infinite;
   }
+
+  .glass-effect {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .dark .glass-effect {
+    background: rgba(0, 0, 0, 0.2);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+  }
 }
 
 @keyframes fadeIn {
@@ -204,6 +245,17 @@ All colors MUST be HSL.
   from {
     opacity: 0;
     transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-30px);
   }
   to {
     opacity: 1;
@@ -244,8 +296,40 @@ All colors MUST be HSL.
   }
 }
 
+@keyframes bounceIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+  70% {
+    transform: scale(0.9);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
 @keyframes shimmer {
   to {
     left: 100%;
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
   }
 }
