@@ -1,4 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { v4 as uuidv4 } from "uuid";
+import { fetchApplications, JobApplication } from "@/services/adminService";
+import { createChatSession, sendChatMessage, ChatSession } from "@/services/chatService";
 import { Link } from "react-router-dom";
 import { Search, Download, Filter, Star } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -16,65 +19,120 @@ import {
 
 const Admin = () => {
   const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<'all' | 'processed' | 'pending'>('all');
 
-  // Mock candidate data
-  const candidates = [
-    {
-      id: 1,
-      name: "Sarah Johnson",
-      email: "sarah.j@email.com",
-      position: "Senior Frontend Developer",
-      college: "MIT",
-      score: 850,
-      status: "Selected",
-      rounds: { mcq: 45, ai: 42, hr: 48 },
-    },
-    {
-      id: 2,
-      name: "Michael Chen",
-      email: "m.chen@email.com",
-      position: "AI/ML Engineer",
-      college: "Stanford University",
-      score: 920,
-      status: "Selected",
-      rounds: { mcq: 48, ai: 47, hr: 50 },
-    },
-    {
-      id: 3,
-      name: "Emily Rodriguez",
-      email: "emily.r@email.com",
-      position: "Product Manager",
-      college: "UC Berkeley",
-      score: 780,
-      status: "HR Round",
-      rounds: { mcq: 42, ai: 39, hr: 0 },
-    },
-    {
-      id: 4,
-      name: "James Wilson",
-      email: "j.wilson@email.com",
-      position: "UX Designer",
-      college: "Harvard University",
-      score: 810,
-      status: "Selected",
-      rounds: { mcq: 43, ai: 41, hr: 45 },
-    },
-    {
-      id: 5,
-      name: "Priya Patel",
-      email: "priya.p@email.com",
-      position: "Senior Frontend Developer",
-      college: "IIT Delhi",
-      score: 890,
-      status: "Selected",
-      rounds: { mcq: 47, ai: 44, hr: 47 },
-    },
-  ];
+  // API candidate data
+  const [candidates, setCandidates] = useState<JobApplication[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Chatbot state
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatSession, setChatSession] = useState<ChatSession | null>(null);
+  const [chatLoading, setChatLoading] = useState(false);
+  const [chatInput, setChatInput] = useState("");
+  const [chatHistory, setChatHistory] = useState<{ role: string; text: string }[]>([]);
+  const [chatError, setChatError] = useState<string | null>(null);
+
+  // Use GUIDs for userId and sessionId
+  const appName = "greeting_agent";
+  const [userId] = useState(() => `u_${uuidv4()}`);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+
+  const openChat = async () => {
+    setChatOpen(true);
+    if (!chatSession) {
+      setChatLoading(true);
+      setChatError(null);
+      try {
+        const newSessionId = `s_${uuidv4()}`;
+        const session = await createChatSession(appName, userId, { key1: "value1", key2: 42, sessionId: newSessionId });
+  setChatSession(session);
+  // Extract sessionId from the session response (if present) or from the payload
+  const returnedSessionId = (session as any).sessionId || (session as any).id || newSessionId;
+  setSessionId(returnedSessionId);
+        setChatHistory([]);
+      } catch (err) {
+        setChatError("Failed to start chat session");
+      } finally {
+        setChatLoading(false);
+      }
+    }
+  };
+
+  const closeChat = () => {
+    setChatOpen(false);
+    setChatInput("");
+    setChatError(null);
+  };
+
+  const handleSendChat = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!chatSession || !chatInput.trim()) return;
+    const userMsg = { role: "user", text: chatInput };
+    setChatHistory((h) => [...h, userMsg]);
+    setChatInput("");
+    setChatLoading(true);
+    setChatError(null);
+    try {
+      // Use the sessionId from the chatSession response
+      const replyRaw = await sendChatMessage(
+        chatSession.appName,
+        chatSession.userId,
+        sessionId,
+        userMsg.text
+      );
+      // If replyRaw is an array (API returns array of responses), extract the text from the first item
+      let replyText = "";
+      try {
+        const parsed = Array.isArray(replyRaw) ? replyRaw : JSON.parse(replyRaw);
+        if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].content && parsed[0].content.parts && parsed[0].content.parts[0].text) {
+          replyText = parsed[0].content.parts[0].text;
+        } else {
+          replyText = typeof replyRaw === "string" ? replyRaw : JSON.stringify(replyRaw);
+        }
+      } catch (e) {
+        replyText = typeof replyRaw === "string" ? replyRaw : JSON.stringify(replyRaw);
+      }
+      setChatHistory((h) => [...h, { role: "assistant", text: replyText }]);
+    } catch (err) {
+      setChatError("Failed to get response");
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    setLoading(true);
+    fetchApplications()
+      .then((data) => {
+        setCandidates(data);
+        setError(null);
+      })
+      .catch((err) => {
+        setError("Failed to fetch applications");
+        setCandidates([]);
+      })
+      .finally(() => setLoading(false));
+  }, []);
 
   const handleAIQuery = () => {
     // This would call an AI assistant in production
     console.log("AI Query:", query);
   };
+
+  // Filter and search logic
+  const filteredCandidates = candidates.filter((candidate) => {
+    const matchesQuery =
+      candidate.name.toLowerCase().includes(query.toLowerCase()) ||
+      candidate.email.toLowerCase().includes(query.toLowerCase()) ||
+      candidate.position.toLowerCase().includes(query.toLowerCase());
+    const matchesStatus =
+      statusFilter === 'all' ||
+      (statusFilter === 'processed' && candidate.isApplicationProcessed) ||
+      (statusFilter === 'pending' && !candidate.isApplicationProcessed);
+    return matchesQuery && matchesStatus;
+  });
 
   return (
     <div className="min-h-screen bg-background">
@@ -96,6 +154,14 @@ const Admin = () => {
       </header>
 
       <div className="container mx-auto px-4 py-8">
+        {/* Post Job Navigation Button */}
+        <div className="flex justify-end mb-8">
+          <Link to="/admin/post-job">
+            <Button className="bg-gradient-to-r from-primary to-accent text-lg px-8 py-3 shadow-lg hover:scale-[1.03] transition-transform">
+              + Post a New Job
+            </Button>
+          </Link>
+        </div>
         {/* Header Section */}
         <div className="mb-8">
           <h1 className="text-4xl font-bold mb-2">Candidate Dashboard</h1>
@@ -106,7 +172,7 @@ const Admin = () => {
         <div className="grid md:grid-cols-4 gap-4 mb-8">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Total Candidates</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">Total Applications</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold">{candidates.length}</div>
@@ -114,71 +180,124 @@ const Admin = () => {
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Selected</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">Processed</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-success">
-                {candidates.filter((c) => c.status === "Selected").length}
+                {candidates.filter((c) => c.isApplicationProcessed).length}
               </div>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Average Score</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold">
-                {Math.round(candidates.reduce((acc, c) => acc + c.score, 0) / candidates.length)}
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">In Progress</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">Unprocessed</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-accent">
-                {candidates.filter((c) => c.status !== "Selected").length}
+                {candidates.filter((c) => !c.isApplicationProcessed).length}
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Latest Application</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-lg font-bold">
+                {candidates[0]?.name || "-"}
               </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* AI Assistant Query */}
-        <Card className="mb-8">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Star className="h-5 w-5 text-accent" />
-              AI Assistant Query
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex gap-2">
+        {/* Chat Bot Button and Modal */}
+        <div className="mb-8 flex justify-end">
+          <Button onClick={openChat} className="bg-gradient-to-r from-primary to-accent text-lg px-6 py-2 shadow-lg">
+            <Star className="h-5 w-5 mr-2 text-accent" />
+            Open Chat Bot
+          </Button>
+        </div>
+        {chatOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+            <div className="bg-card rounded-lg shadow-xl w-full max-w-md flex flex-col">
+              <div className="flex items-center justify-between px-6 py-4 border-b">
+                <div className="flex items-center gap-2">
+                  <Star className="h-5 w-5 text-accent" />
+                  <span className="font-bold text-lg">AI Chat Bot</span>
+                </div>
+                <Button variant="ghost" size="icon" onClick={closeChat}>
+                  ×
+                </Button>
+              </div>
+              <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3 bg-background" style={{ minHeight: 300, maxHeight: 400 }}>
+                {chatLoading && chatHistory.length === 0 && (
+                  <div className="text-center text-muted-foreground">Starting chat session...</div>
+                )}
+                {chatError && <div className="text-center text-destructive">{chatError}</div>}
+                {chatHistory.map((msg, idx) => (
+                  <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`rounded-lg px-4 py-2 max-w-[80%] ${msg.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground'}`}>
+                      {msg.text}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <form onSubmit={handleSendChat} className="flex gap-2 p-4 border-t bg-background">
+                <Input
+                  value={chatInput}
+                  onChange={e => setChatInput(e.target.value)}
+                  placeholder="Type your message..."
+                  disabled={chatLoading}
+                  className="flex-1"
+                  autoFocus
+                />
+                <Button type="submit" disabled={chatLoading || !chatInput.trim()}>
+                  Send
+                </Button>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Candidates Table with Search and Filter */}
+        <Card>
+          <CardHeader className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div className="flex items-center gap-4 w-full md:w-auto">
+              <CardTitle>All Applications</CardTitle>
+              <div className="flex gap-2">
+                <Button
+                  variant={statusFilter === 'all' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setStatusFilter('all')}
+                >
+                  All
+                </Button>
+                <Button
+                  variant={statusFilter === 'processed' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setStatusFilter('processed')}
+                >
+                  Processed
+                </Button>
+                <Button
+                  variant={statusFilter === 'pending' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setStatusFilter('pending')}
+                >
+                  Pending
+                </Button>
+              </div>
+            </div>
+            <div className="flex gap-2 w-full md:w-auto">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Ask AI: 'Show top 5 candidates with score > 700 from reputed colleges'"
+                  placeholder="Search by name, email, or position"
                   className="pl-10"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                 />
               </div>
-              <Button onClick={handleAIQuery} className="bg-accent hover:bg-accent/90">
-                Ask AI
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Candidates Table */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>All Candidates</CardTitle>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm">
-                <Filter className="h-4 w-4 mr-2" />
-                Filter
-              </Button>
               <Button variant="outline" size="sm">
                 <Download className="h-4 w-4 mr-2" />
                 Export
@@ -186,53 +305,50 @@ const Admin = () => {
             </div>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Position</TableHead>
-                  <TableHead>College</TableHead>
-                  <TableHead className="text-center">MCQ</TableHead>
-                  <TableHead className="text-center">AI Interview</TableHead>
-                  <TableHead className="text-center">HR Round</TableHead>
-                  <TableHead className="text-center">Total Score</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {candidates.map((candidate) => (
-                  <TableRow key={candidate.id}>
-                    <TableCell>
-                      <div>
-                        <div className="font-medium">{candidate.name}</div>
-                        <div className="text-sm text-muted-foreground">{candidate.email}</div>
-                      </div>
-                    </TableCell>
-                    <TableCell>{candidate.position}</TableCell>
-                    <TableCell>{candidate.college}</TableCell>
-                    <TableCell className="text-center">{candidate.rounds.mcq}/50</TableCell>
-                    <TableCell className="text-center">{candidate.rounds.ai}/50</TableCell>
-                    <TableCell className="text-center">
-                      {candidate.rounds.hr > 0 ? `${candidate.rounds.hr}/50` : "-"}
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <span className="font-bold text-lg">{candidate.score}</span>
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        className={
-                          candidate.status === "Selected"
-                            ? "bg-success text-success-foreground"
-                            : "bg-accent text-accent-foreground"
-                        }
-                      >
-                        {candidate.status}
-                      </Badge>
-                    </TableCell>
+            {loading ? (
+              <div className="text-center py-8">Loading applications...</div>
+            ) : error ? (
+              <div className="text-center text-destructive py-8">{error}</div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Position</TableHead>
+                    <TableHead>Resume</TableHead>
+                    <TableHead>Applied On</TableHead>
+                    <TableHead>Status</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {filteredCandidates.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-8">No applications found.</TableCell>
+                    </TableRow>
+                  ) : (
+                    filteredCandidates.map((candidate) => (
+                      <TableRow key={candidate.jobApplicationId}>
+                        <TableCell>
+                          <div className="font-medium">{candidate.name}</div>
+                        </TableCell>
+                        <TableCell>{candidate.email}</TableCell>
+                        <TableCell>{candidate.position}</TableCell>
+                        <TableCell>
+                          <a href={candidate.resumeUrl} target="_blank" rel="noopener noreferrer" className="text-primary underline">Resume</a>
+                        </TableCell>
+                        <TableCell>{new Date(candidate.appliedOn).toLocaleDateString()}</TableCell>
+                        <TableCell>
+                          <Badge className={candidate.isApplicationProcessed ? "bg-success text-success-foreground" : "bg-accent text-accent-foreground"}>
+                            {candidate.isApplicationProcessed ? "Processed" : "Pending"}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            )}
           </CardContent>
         </Card>
       </div>

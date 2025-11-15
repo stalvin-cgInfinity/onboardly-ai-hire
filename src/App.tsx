@@ -7,6 +7,7 @@ import Index from "./pages/Index";
 import Jobs from "./pages/Jobs";
 import JobDetails from "./pages/JobDetails";
 import Admin from "./pages/Admin";
+import PostJob from "./pages/PostJob";
 import MCQInterview from "./pages/MCQInterview";
 import AIInterview from "./pages/AIInterview";
 import NotFound from "./pages/NotFound";
@@ -24,6 +25,7 @@ const App = () => (
           <Route path="/jobs" element={<Jobs />} />
           <Route path="/jobs/:id" element={<JobDetails />} />
           <Route path="/admin" element={<Admin />} />
+          <Route path="/admin/post-job" element={<PostJob />} />
           <Route path="/interview/mcq" element={<MCQInterview />} />
           <Route path="/interview/ai" element={<AIInterview />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
