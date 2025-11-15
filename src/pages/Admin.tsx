@@ -82,12 +82,36 @@ const Admin = () => {
         sessionId,
         userMsg.text
       );
-      // If replyRaw is an array (API returns array of responses), extract the text from the first item
+      // Extract the last available text from the last object in the response array
       let replyText = "";
       try {
         const parsed = Array.isArray(replyRaw) ? replyRaw : JSON.parse(replyRaw);
-        if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].content && parsed[0].content.parts && parsed[0].content.parts[0].text) {
-          replyText = parsed[0].content.parts[0].text;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const last = parsed[parsed.length - 1];
+          // Try to find a 'text' property in the last object's content.parts
+          if (last && last.content && Array.isArray(last.content.parts)) {
+            // Look for a part with a 'text' property, prefer the last one
+            for (let i = last.content.parts.length - 1; i >= 0; i--) {
+              const part = last.content.parts[i];
+              if (typeof part.text === 'string') {
+                replyText = part.text;
+                break;
+              }
+              // If part has functionResponse with response.content array
+              if (part.functionResponse && part.functionResponse.response && Array.isArray(part.functionResponse.response.content)) {
+                const contentArr = part.functionResponse.response.content;
+                for (let j = contentArr.length - 1; j >= 0; j--) {
+                  if (typeof contentArr[j].text === 'string') {
+                    replyText = contentArr[j].text;
+                    break;
+                  }
+                }
+                if (replyText) break;
+              }
+            }
+          }
+          // Fallback: stringify the last object if no text found
+          if (!replyText) replyText = JSON.stringify(last);
         } else {
           replyText = typeof replyRaw === "string" ? replyRaw : JSON.stringify(replyRaw);
         }
