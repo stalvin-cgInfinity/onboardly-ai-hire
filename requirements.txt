@@ -1,0 +1,12 @@
+# Python dependencies for LiveKit + Tavus AI Interview Agent
+
+# LiveKit Agents with Tavus support
+livekit-agents[tavus]~=1.2
+
+# OpenAI plugin for STT, LLM, and TTS
+livekit-plugins-openai>=0.6.0
+
+# Optional: Additional voice/avatar providers
+# livekit-plugins-elevenlabs  # For ElevenLabs voices
+# livekit-plugins-deepgram    # For Deepgram STT
+# livekit-plugins-google      # For Google Cloud STT/TTS
